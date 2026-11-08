@@ -34,15 +34,15 @@ const pl=(n,w)=>n+" "+w+(n==1?"":"s");const app=document.getElementById("app");
 const TAGS=["Back stock","Out of stock","Order change","Contact","Issue"];let selTags=[];
 function route(){const h=decodeURIComponent(location.hash.slice(1));if(h.startsWith("s/"))store(h.slice(2));else if(h.startsWith("c/"))chain(h.slice(2));else home();window.scrollTo(0,0)}
 addEventListener("hashchange",route);
-function home(){const tot=STORES.reduce((a,s)=>a+nc(s.id),0);
+function home(){endMic();const tot=STORES.reduce((a,s)=>a+nc(s.id),0);
 app.innerHTML=`<h1>ROUTE BOOK</h1><div class="mono">${STORES.length} stops · ${pl(tot,"note")} on file</div><hr class="rule"><p class="lbl">Pick a chain</p><div class="grid">`+
 CHAINS.map(c=>{const ss=STORES.filter(s=>s.chain==c),n=ss.reduce((a,s)=>a+nc(s.id),0);return `<button class="card" onclick="location.hash='c/'+encodeURIComponent('${esc(c).replace(/'/g,"\\'")}')"><div class="t cond">${esc(c)}</div><div class="mono">${pl(ss.length,"stop")}${n?" · "+pl(n,"note"):""}</div></button>`}).join("")+
 `</div><p class="foot">Tap a chain above to see its stores.</p><hr class="rule"><p class="lbl">Backup</p><div class="flex"><button class="btn" onclick="exp()">Export notes</button><button class="btn ghost" onclick="imp.click()">Import</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="doImp(this)"></div>`}
-function chain(c){const ss=STORES.filter(s=>s.chain==c);
+function chain(c){endMic();const ss=STORES.filter(s=>s.chain==c);
 app.innerHTML=`<button class="back" onclick="location.hash=''">← All chains</button><h1>${esc(c.toUpperCase())}</h1><div class="mono">${pl(ss.length,"stop")}</div><hr class="rule"><p class="lbl">Pick a store</p><div class="list">`+
 ss.map(s=>`<button class="card" onclick="location.hash='s/${s.id}'"><div class="t cond">${esc(s.name)}</div><div class="mono">${esc(s.addr.split(",")[0])}${nc(s.id)?" · "+pl(nc(s.id),"note"):""}</div></button>`).join("")+"</div>"}
-let rec=null,cur=null;
-function store(id){const s=STORES.find(x=>x.id==id);if(!s)return home();cur=id;const d=S(id);selTags=[];
+let rec=null,cur=null,micOn=false,micGen=0,micQuick=0,micSeq=0;
+function store(id){endMic();const s=STORES.find(x=>x.id==id);if(!s)return home();cur=id;const d=S(id);selTags=[];
 app.innerHTML=`<button class="back" onclick="location.hash='c/'+encodeURIComponent(${esc(JSON.stringify(s.chain))})">← ${esc(s.chain)}</button><h1>${esc(s.name.toUpperCase())}</h1><div class="mono">${esc(s.chain)}</div><hr class="rule">
 <div class="row"><b>Address</b><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.chain+" "+s.addr)}" target="_blank">📍 ${esc(s.addr)}</a></div>
 <div class="row"><b>Phone</b><a href="tel:${s.phone.replace(/\D/g,"")}">📞 ${esc(s.phone)}</a></div>
@@ -50,7 +50,7 @@ app.innerHTML=`<button class="back" onclick="location.hash='c/'+encodeURICompone
 <div class="row"><b>Receiving hours</b><input id="recv" placeholder="e.g. Mon–Fri 6–10 AM" value="${esc(d.recv)}" onchange="S(cur).recv=this.value;save()"></div>
 <div class="row"><b>Manager / contact</b><input id="contact" placeholder="Name, phone…" value="${esc(d.contact)}" onchange="S(cur).contact=this.value;save()"></div>
 <p class="lbl" style="margin-top:20px">Add a note</p>
-<button class="mic" id="mic" onclick="toggleMic()" aria-label="Dictate">🎤</button><div class="mono" id="mstat" style="text-align:center">Tap the mic and speak</div>
+<button class="mic" id="mic" onclick="toggleMic()" aria-label="Dictate" aria-pressed="false">🎤</button><div class="mono" id="mstat" style="text-align:center">Tap once to talk. Tap again to stop.</div>
 <div class="tags">${TAGS.map(t=>`<button class="tag" onclick="this.classList.toggle('on');selTags=[...document.querySelectorAll('.tag.on')].map(b=>b.textContent)">${t}</button>`).join("")}</div>
 <textarea id="txt" rows="3" placeholder="Or type here (keyboard mic works too)"></textarea>
 <div class="flex"><button class="btn" onclick="addNote()">Save note</button><button class="btn ghost" onclick="txt.value=''">Clear</button></div>
@@ -59,13 +59,38 @@ function renderNotes(){const d=S(cur);document.getElementById("notes").innerHTML
 function addNote(){const t=txt.value.trim();if(!t&&!selTags.length)return;S(cur).notes.push({t:Date.now(),text:t,tags:selTags});save();store(cur)}
 function delNote(t){if(!confirm("Delete this note?"))return;const d=S(cur);d.notes=d.notes.filter(n=>n.t!=t);save();store(cur)}
 function editNote(t){const n=S(cur).notes.find(n=>n.t==t);const v=prompt("Edit note",n.text);if(v==null)return;n.text=v.trim();save();renderNotes()}
-function toggleMic(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition;const st=document.getElementById("mstat"),m=document.getElementById("mic");
-if(!SR){st.textContent="Voice not supported here, use the keyboard mic below";return}
-if(rec){rec.stop();return}rec=new SR();rec.lang="en-US";rec.interimResults=true;rec.continuous=false;const base=txt.value?txt.value.trim()+" ":"";
-rec.onresult=e=>{let s="";for(const r of e.results)s+=r[0].transcript;txt.value=base+s};
-rec.onstart=()=>{m.classList.add("rec");st.textContent="Listening… tap to stop"};
-rec.onerror=e=>{st.textContent="Mic error: "+e.error};
-rec.onend=()=>{m.classList.remove("rec");rec=null;if(st.textContent.startsWith("Listening"))st.textContent="Check the text, then tap Save note"};rec.start()}
+function micUi(on,msg){const m=document.getElementById("mic"),st=document.getElementById("mstat");
+if(m){m.classList.toggle("rec",!!on);m.setAttribute("aria-label",on?"Stop dictation":"Dictate");m.setAttribute("aria-pressed",on?"true":"false")}
+if(st&&msg!=null)st.textContent=msg}
+function endMic(msg){if(!micOn&&!rec){if(msg)micUi(false,msg);return}
+const session=rec;micOn=false;micGen++;micQuick=0;
+if(session){try{session.stop()}catch(e){}if(rec===session)rec=null}
+micUi(false,msg)}
+// Android Chrome ends webkitSpeechRecognition after a short silence even when continuous is set,
+// so a session the user has not tapped off is started again and keeps appending into the note.
+function beginMic(SR,gen){if(!micOn||gen!==micGen||rec)return;
+const box=document.getElementById("txt");if(!box||!box.isConnected){endMic();return}
+const session=new SR();rec=session;session.lang="en-US";session.interimResults=true;session.continuous=true;session._seq=++micSeq;
+const prefix=box.value.trim(),t0=Date.now();let started=false;
+session.onstart=()=>{started=true;micQuick=0;if(micOn&&gen===micGen)micUi(true,"Listening… tap again to stop")};
+session.onresult=e=>{if(session._seq!==micSeq||!box.isConnected)return;let said="";
+for(let i=0;i<e.results.length;i++)said+=e.results[i][0].transcript;
+const spoken=said.replace(/^\s+/,"").replace(/\s+$/,"");
+box.value=spoken?(prefix?prefix+" "+spoken:spoken):prefix};
+session.onerror=e=>{if(!micOn||gen!==micGen)return;
+if(e.error==="no-speech"||e.error==="aborted")return;
+endMic(e.error==="not-allowed"||e.error==="service-not-allowed"?"Mic blocked — allow the microphone, or type the note":e.error==="audio-capture"?"No microphone found — type the note instead":e.error==="network"?"Mic error: network — check your connection, or type the note":"Mic error: "+e.error)};
+session.onend=()=>{if(rec===session)rec=null;if(!micOn||gen!==micGen)return;
+if(!started||Date.now()-t0<100){if(++micQuick>=5){endMic("Mic stopped — tap it to try again, or type the note");return}}
+else micQuick=0;
+setTimeout(()=>beginMic(SR,gen),200)};
+try{session.start()}catch(err){if(session._seq===micSeq)micSeq++;if(rec===session)rec=null;if(!micOn||gen!==micGen)return;
+if(++micQuick>=5){endMic("Mic stopped — tap it to try again, or type the note");return}
+setTimeout(()=>beginMic(SR,gen),300)}}
+function toggleMic(){const SR=window.SpeechRecognition||window.webkitSpeechRecognition,st=document.getElementById("mstat");
+if(!SR){if(st)st.textContent="Voice not supported here, use the keyboard mic below";return}
+if(micOn){endMic("Check the text, then tap Save note");return}
+micOn=true;micQuick=0;const gen=++micGen;micUi(true,"Listening… tap again to stop");beginMic(SR,gen)}
 function exp(){const b=new Blob([JSON.stringify(D,null,1)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="routebook-backup-"+new Date().toISOString().slice(0,10)+".json";a.click()}
 function doImp(i){const f=i.files[0];if(!f)return;f.text().then(t=>{const x=JSON.parse(t);if(!x.stores)throw 0;if(!confirm("Replace current notes with this backup?"))return;D=x;save();route()}).catch(()=>alert("That file isn't a Route Book backup."))}
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");route();
