@@ -3,7 +3,7 @@
 <meta name="theme-color" content="#f1e9da"><title>Route Book</title>
 <link rel="manifest" href="manifest.json?v=2"><link rel="icon" type="image/png" href="favicon-32.png?v=2"><link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
 <style>
-:root{--bg:#f1e9da;--ink:#1f2633;--line:#d9cfbd;--mut:#6b6458;--acc:#b8322a}
+:root{--bg:#f1e9da;--ink:#1f2633;--line:#d9cfbd;--mut:#6b6458;--acc:#b8322a;--low:#e0a106}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,Roboto,sans-serif;-webkit-tap-highlight-color:transparent}
 .wrap{max-width:560px;margin:0 auto;padding:22px 20px 120px}
 h1,.cond{font-family:"Barlow Condensed","Roboto Condensed","Arial Narrow",sans-serif;font-stretch:condensed;font-weight:800;letter-spacing:.3px}
@@ -19,6 +19,7 @@ h1{font-size:40px;margin:0;line-height:1}.mono{font-family:ui-monospace,"Roboto 
 .notes .when{font-size:12px}.notes .acts{float:right}.notes .acts button{background:none;border:0;font-size:16px;cursor:pointer;padding:2px 6px}
 .tags{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}.tag{border:1.5px solid var(--ink);background:none;border-radius:20px;padding:5px 11px;font:600 13px system-ui;cursor:pointer}.tag.on{background:var(--ink);color:#fff}
 .chip{display:inline-block;font:600 11px system-ui;background:var(--ink);color:#fff;border-radius:10px;padding:1px 7px;margin-right:6px}
+.chip.low{background:var(--low);color:var(--ink)}.card.board{margin-bottom:16px}
 .mic{display:block;margin:10px auto;width:84px;height:84px;border-radius:50%;border:0;background:var(--ink);color:#fff;font-size:34px;cursor:pointer}.mic.rec{background:var(--acc);animation:p 1s infinite}
 @keyframes p{50%{transform:scale(1.07)}}.btn{background:var(--ink);color:#fff;border:0;border-radius:8px;padding:10px 16px;font:600 15px system-ui;cursor:pointer}.btn.ghost{background:none;color:var(--ink);border:1.5px solid var(--ink)}
 .foot{text-align:center;color:var(--mut);margin-top:26px;font-size:15px}.flex{display:flex;gap:8px;margin-top:8px}
@@ -31,34 +32,41 @@ const S=id=>(D.stores[id]||(D.stores[id]={notes:[],recv:"",contact:""}));
 const nc=id=>(D.stores[id]?.notes||[]).length;
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
 const pl=(n,w)=>n+" "+w+(n==1?"":"s");const app=document.getElementById("app");
-const TAGS=["Back stock","Out of stock","Order change","Contact","Issue"];let selTags=[];
-function route(){const h=decodeURIComponent(location.hash.slice(1));if(h.startsWith("s/"))store(h.slice(2));else if(h.startsWith("c/"))chain(h.slice(2));else home();window.scrollTo(0,0)}
+const TAGS=["Back stock","Out of stock","Low stock","Order change","Contact","Issue"];let selTags=[],noteKind="store";
+function G(){if(!Array.isArray(D.general))D.general=[];return D.general}
+function bag(){return noteKind==="general"?G():S(cur).notes}
+function noteForm(n){return `<p class="lbl" style="margin-top:20px">Add a note</p>
+<button class="mic" id="mic" onclick="toggleMic()" aria-label="Dictate" aria-pressed="false">🎤</button><div class="mono" id="mstat" style="text-align:center">Tap once to talk. Tap again to stop.</div>
+<div class="tags">${TAGS.map(t=>`<button class="tag" onclick="this.classList.toggle('on');selTags=[...document.querySelectorAll('.tag.on')].map(b=>b.textContent)">${t}</button>`).join("")}</div>
+<textarea id="txt" rows="3" placeholder="Or type here (keyboard mic works too)"></textarea>
+<div class="flex"><button class="btn" onclick="addNote()">Save note</button><button class="btn ghost" onclick="txt.value=''">Clear</button></div>
+<p class="lbl" style="margin-top:22px">Notes (${n})</p><ul class="notes" id="notes"></ul>`}
+function route(){const h=decodeURIComponent(location.hash.slice(1));if(h.startsWith("s/"))store(h.slice(2));else if(h.startsWith("c/"))chain(h.slice(2));else if(h==="general")general();else home();window.scrollTo(0,0)}
 addEventListener("hashchange",route);
-function home(){endMic();const tot=STORES.reduce((a,s)=>a+nc(s.id),0);
-app.innerHTML=`<h1>ROUTE BOOK</h1><div class="mono">${STORES.length} stops · ${pl(tot,"note")} on file</div><hr class="rule"><p class="lbl">Pick a chain</p><div class="grid">`+
+function home(){endMic();const gn=G().length,tot=STORES.reduce((a,s)=>a+nc(s.id),0)+gn;
+app.innerHTML=`<h1>ROUTE BOOK</h1><div class="mono">${STORES.length} stops · ${pl(tot,"note")} on file</div><hr class="rule">
+<button class="card board" onclick="location.hash='general'"><div class="t cond">General notes</div><div class="mono">Reminders and ideas for the whole route${gn?" · "+pl(gn,"note"):""}</div></button>
+<p class="lbl">Pick a chain</p><div class="grid">`+
 CHAINS.map(c=>{const ss=STORES.filter(s=>s.chain==c),n=ss.reduce((a,s)=>a+nc(s.id),0);return `<button class="card" onclick="location.hash='c/'+encodeURIComponent('${esc(c).replace(/'/g,"\\'")}')"><div class="t cond">${esc(c)}</div><div class="mono">${pl(ss.length,"stop")}${n?" · "+pl(n,"note"):""}</div></button>`}).join("")+
 `</div><p class="foot">Tap a chain above to see its stores.</p><hr class="rule"><p class="lbl">Backup</p><div class="flex"><button class="btn" onclick="exp()">Export notes</button><button class="btn ghost" onclick="imp.click()">Import</button><input id="imp" type="file" accept=".json,application/json" hidden onchange="doImp(this)"></div>`}
 function chain(c){endMic();const ss=STORES.filter(s=>s.chain==c);
 app.innerHTML=`<button class="back" onclick="location.hash=''">← All chains</button><h1>${esc(c.toUpperCase())}</h1><div class="mono">${pl(ss.length,"stop")}</div><hr class="rule"><p class="lbl">Pick a store</p><div class="list">`+
 ss.map(s=>`<button class="card" onclick="location.hash='s/${s.id}'"><div class="t cond">${esc(s.name)}</div><div class="mono">${esc(s.addr.split(",")[0])}${nc(s.id)?" · "+pl(nc(s.id),"note"):""}</div></button>`).join("")+"</div>"}
 let rec=null,cur=null,micOn=false,micGen=0,micQuick=0,micSeq=0;
-function store(id){endMic();const s=STORES.find(x=>x.id==id);if(!s)return home();cur=id;const d=S(id);selTags=[];
+function store(id){endMic();const s=STORES.find(x=>x.id==id);if(!s)return home();noteKind="store";cur=id;const d=S(id);selTags=[];
 app.innerHTML=`<button class="back" onclick="location.hash='c/'+encodeURIComponent(${esc(JSON.stringify(s.chain))})">← ${esc(s.chain)}</button><h1>${esc(s.name.toUpperCase())}</h1><div class="mono">${esc(s.chain)}</div><hr class="rule">
 <div class="row"><b>Address</b><a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(s.chain+" "+s.addr)}" target="_blank">📍 ${esc(s.addr)}</a></div>
 <div class="row"><b>Phone</b><a href="tel:${s.phone.replace(/\D/g,"")}">📞 ${esc(s.phone)}</a></div>
 <div class="row"><b>Store hours</b>${esc(s.hours)}</div>
 <div class="row"><b>Receiving hours</b><input id="recv" placeholder="e.g. Mon–Fri 6–10 AM" value="${esc(d.recv)}" onchange="S(cur).recv=this.value;save()"></div>
 <div class="row"><b>Manager / contact</b><input id="contact" placeholder="Name, phone…" value="${esc(d.contact)}" onchange="S(cur).contact=this.value;save()"></div>
-<p class="lbl" style="margin-top:20px">Add a note</p>
-<button class="mic" id="mic" onclick="toggleMic()" aria-label="Dictate" aria-pressed="false">🎤</button><div class="mono" id="mstat" style="text-align:center">Tap once to talk. Tap again to stop.</div>
-<div class="tags">${TAGS.map(t=>`<button class="tag" onclick="this.classList.toggle('on');selTags=[...document.querySelectorAll('.tag.on')].map(b=>b.textContent)">${t}</button>`).join("")}</div>
-<textarea id="txt" rows="3" placeholder="Or type here (keyboard mic works too)"></textarea>
-<div class="flex"><button class="btn" onclick="addNote()">Save note</button><button class="btn ghost" onclick="txt.value=''">Clear</button></div>
-<p class="lbl" style="margin-top:22px">Notes (${d.notes.length})</p><ul class="notes" id="notes"></ul>`;renderNotes()}
-function renderNotes(){const d=S(cur);document.getElementById("notes").innerHTML=d.notes.length?d.notes.slice().sort((a,b)=>b.t-a.t).map(n=>`<li><span class="acts"><button onclick="editNote(${n.t})">✏️</button><button onclick="delNote(${n.t})">🗑️</button></span><div class="mono when">${new Date(n.t).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</div>${(n.tags||[]).map(t=>`<span class="chip">${esc(t)}</span>`).join("")}• ${esc(n.text)}</li>`).join(""):'<p class="mono">No notes yet.</p>'}
-function addNote(){const t=txt.value.trim();if(!t&&!selTags.length)return;S(cur).notes.push({t:Date.now(),text:t,tags:selTags});save();store(cur)}
-function delNote(t){if(!confirm("Delete this note?"))return;const d=S(cur);d.notes=d.notes.filter(n=>n.t!=t);save();store(cur)}
-function editNote(t){const n=S(cur).notes.find(n=>n.t==t);const v=prompt("Edit note",n.text);if(v==null)return;n.text=v.trim();save();renderNotes()}
+`+noteForm(d.notes.length);renderNotes()}
+function general(){endMic();noteKind="general";cur=null;selTags=[];
+app.innerHTML=`<button class="back" onclick="location.hash=''">← All chains</button><h1>GENERAL NOTES</h1><div class="mono">Reminders and ideas, not tied to a store</div><hr class="rule">`+noteForm(G().length);renderNotes()}
+function renderNotes(){const notes=bag();document.getElementById("notes").innerHTML=notes.length?notes.slice().sort((a,b)=>b.t-a.t).map(n=>`<li><span class="acts"><button onclick="editNote(${n.t})">✏️</button><button onclick="delNote(${n.t})">🗑️</button></span><div class="mono when">${new Date(n.t).toLocaleString([], {month:"short",day:"numeric",hour:"numeric",minute:"2-digit"})}</div>${(n.tags||[]).map(t=>`<span class="chip${t==="Low stock"?" low":""}">${esc(t)}</span>`).join("")}• ${esc(n.text)}</li>`).join(""):'<p class="mono">No notes yet.</p>'}
+function addNote(){const t=txt.value.trim();if(!t&&!selTags.length)return;bag().push({t:Date.now(),text:t,tags:selTags});save();noteKind==="general"?general():store(cur)}
+function delNote(t){if(!confirm("Delete this note?"))return;if(noteKind==="general")D.general=G().filter(n=>n.t!=t);else S(cur).notes=S(cur).notes.filter(n=>n.t!=t);save();noteKind==="general"?general():store(cur)}
+function editNote(t){const n=bag().find(n=>n.t==t);const v=prompt("Edit note",n.text);if(v==null)return;n.text=v.trim();save();renderNotes()}
 function micUi(on,msg){const m=document.getElementById("mic"),st=document.getElementById("mstat");
 if(m){m.classList.toggle("rec",!!on);m.setAttribute("aria-label",on?"Stop dictation":"Dictate");m.setAttribute("aria-pressed",on?"true":"false")}
 if(st&&msg!=null)st.textContent=msg}
@@ -92,6 +100,6 @@ if(!SR){if(st)st.textContent="Voice not supported here, use the keyboard mic bel
 if(micOn){endMic("Check the text, then tap Save note");return}
 micOn=true;micQuick=0;const gen=++micGen;micUi(true,"Listening… tap again to stop");beginMic(SR,gen)}
 function exp(){const b=new Blob([JSON.stringify(D,null,1)],{type:"application/json"});const a=document.createElement("a");a.href=URL.createObjectURL(b);a.download="routebook-backup-"+new Date().toISOString().slice(0,10)+".json";a.click()}
-function doImp(i){const f=i.files[0];if(!f)return;f.text().then(t=>{const x=JSON.parse(t);if(!x.stores)throw 0;if(!confirm("Replace current notes with this backup?"))return;D=x;save();route()}).catch(()=>alert("That file isn't a Route Book backup."))}
+function doImp(i){const f=i.files[0];if(!f)return;f.text().then(t=>{const x=JSON.parse(t);if(!x.stores)throw 0;if(!confirm("Replace current notes with this backup?"))return;D=x;if(!Array.isArray(D.general))D.general=[];save();route()}).catch(()=>alert("That file isn't a Route Book backup."))}
 if("serviceWorker"in navigator)navigator.serviceWorker.register("sw.js");route();
 </script></body></html>
